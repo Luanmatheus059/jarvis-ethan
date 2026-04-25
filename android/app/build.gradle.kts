@@ -90,7 +90,7 @@ dependencies {
 
     // LLM 100% on-device — MediaPipe LLM Inference (Gemma, Phi, Falcon).
     // Modelo .task baixado uma vez e executado offline pelo NPU/GPU/CPU.
-    implementation("com.google.mediapipe:tasks-genai:0.10.20")
+    implementation("com.google.mediapipe:tasks-genai:0.10.14")
 
     // RSS / HTML parsing pra aprendizado em tempo real (noticias, arxiv, github trending)
     implementation("org.jsoup:jsoup:1.17.2")
