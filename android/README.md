@@ -1,5 +1,8 @@
 # JARVIS — App Android
 
+> **Build status**: este é o build com todas as correções de Vivo/MIUI
+> aplicadas (configuração restrita, voz, validação de URL do LLM).
+
 Assistente de voz pessoal que **roda 100% no seu celular**. Sem servidor, sem API
 do Anthropic ou Fish Audio: o reconhecimento de voz, a geração de respostas (LLM)
 e a fala (TTS) acontecem todos no próprio aparelho. As únicas chamadas à internet
