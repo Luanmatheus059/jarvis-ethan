@@ -25,6 +25,7 @@ class LocalTextToSpeech(private val context: Context) {
 
     private var tts: TextToSpeech? = null
     private var ready = false
+    private val profile = VoiceProfile(context)
 
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
@@ -32,9 +33,10 @@ class LocalTextToSpeech(private val context: Context) {
     fun init(onReady: (Boolean) -> Unit = {}) {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
+                val p = profile.current()
                 tts?.language = Locale("pt", "BR")
-                tts?.setPitch(0.85f) // mais grave — JARVIS
-                tts?.setSpeechRate(1.0f)
+                tts?.setPitch(p.pitch)         // grave por padrao, ajustado pelo perfil
+                tts?.setSpeechRate(p.speechRate)
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) { _isSpeaking.value = true }
                     override fun onDone(utteranceId: String?) { _isSpeaking.value = false }
@@ -61,6 +63,13 @@ class LocalTextToSpeech(private val context: Context) {
     fun stop() {
         tts?.stop()
         _isSpeaking.value = false
+    }
+
+    /** Recarrega o perfil de voz (ex.: depois do senhor enviar uma nova amostra). */
+    fun reloadProfile() {
+        val p = profile.current()
+        tts?.setPitch(p.pitch)
+        tts?.setSpeechRate(p.speechRate)
     }
 
     fun shutdown() {

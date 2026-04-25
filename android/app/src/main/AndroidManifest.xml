@@ -88,6 +88,14 @@
             android:name=".ui.SettingsActivity"
             android:exported="false"
             android:label="@string/settings_title" />
+        <activity
+            android:name=".ui.ModelSetupActivity"
+            android:exported="false"
+            android:label="Cérebro local" />
+        <activity
+            android:name=".ui.VoiceSetupActivity"
+            android:exported="false"
+            android:label="Voz personalizada" />
 
         <!-- Servico em primeiro plano (mantem JARVIS ouvindo com tela desligada) -->
         <service

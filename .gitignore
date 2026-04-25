@@ -39,3 +39,16 @@ desktop-overlay/node_modules/
 context/
 *.db-shm
 *.db-wal
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/local.properties
+android/.idea/
+android/captures/
+android/.cxx/
+android/*.iml
+android/app/*.iml
+android/.kotlin/

@@ -24,9 +24,13 @@ class LocalLlm(private val context: Context) {
     private var inference: LlmInference? = null
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 
-    fun isModelInstalled(): Boolean = modelFile().exists()
+    fun isModelInstalled(): Boolean = modelFile().exists() && modelFile().length() > 1_000_000
 
-    private fun modelFile(): File =
+    /**
+     * Caminho do modelo `.task`. Mesmo nome que o ModelDownloader usa, para
+     * que o auto-downloader e o LLM falem do mesmo arquivo.
+     */
+    fun modelFile(): File =
         File(context.getExternalFilesDir(null), "llm/gemma.task")
 
     fun init(): Boolean {

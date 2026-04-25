@@ -54,36 +54,42 @@ ocorrem quando você pede ou pelo refresh em segundo plano.
                        └──────────┘
 ```
 
-## Como compilar e instalar
+## Como instalar (caminho fácil — APK pronto)
 
-### Pré-requisitos
+Toda vez que esta branch recebe um commit, o **GitHub Actions** monta o APK
+automaticamente. O senhor só precisa baixar.
 
-- Android Studio Iguana ou superior (Gradle 8.7).
-- JDK 17.
-- Aparelho Android **8.0 (API 26)** ou superior. Para o LLM rodar bem, recomendo
-  **6 GB+ de RAM**.
+1. Abra https://github.com/luanmatheus059/jarvis-ethan/releases no celular.
+2. Procure o release mais recente (`JARVIS Android build #N`).
+3. Baixe `app-debug.apk`.
+4. Toque no APK no notificador. Se o Android pedir, autorize "Instalar de
+   fontes desconhecidas" para o navegador / gerenciador de arquivos.
+5. Abra o app `JARVIS`.
 
-### Passos
+> Se preferir compilar você mesmo: `cd android && ./gradlew :app:assembleDebug`
+> (precisa de JDK 17 + Android SDK + plataforma 34).
 
-```bash
-cd android
-./gradlew :app:assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+## Setup dentro do app (tudo no celular, sem PC)
 
-### Configurar o LLM local (Gemma)
+Ao abrir o app pela primeira vez, a tela inicial mostra cards com checklist:
 
-1. Baixe o modelo em formato `.task` da [galeria do MediaPipe](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference)
-   (recomendado: **Gemma 2 2B IT, INT4**, ≈1.4 GB).
-2. Copie pro aparelho:
-   ```bash
-   adb push gemma-2-2b-it-int4.task /sdcard/Android/data/com.jarvis.assistant/files/llm/gemma.task
-   ```
-3. Abra o app — o JARVIS detecta sozinho e aquece o modelo.
+1. **Cérebro local (LLM)** → toque em "Baixar agora". Padrão: Falcon-RW-1B INT8
+   (~570 MB, gratuito, sem login). Pode trocar por outro `.task` colando uma URL.
+2. **Voz personalizada** → toque em "Enviar áudio" e escolha o MP3/WAV com a
+   voz desejada. O app calibra pitch e velocidade do TTS local pra imitar
+   o tom (clonagem neural completa offline ainda não cabe num celular comum
+   sem dor — esta é a melhor opção 100% gratuita).
+3. **Controle do telefone (Acessibilidade)** → toque para abrir a tela do
+   sistema e ative `JARVIS — Controle do Telefone`.
+4. **Definir como Assistente** (opcional) — permite chamar pelo gesto do botão
+   power.
+5. **Ignorar otimização de bateria** — sem isso, o Android pode matar o serviço
+   depois de algumas horas.
 
-> Se o senhor não copiar o modelo, o JARVIS ainda escuta, transcreve e responde
-> por TTS, mas vai avisar polidamente que o modelo offline ainda não está
-> instalado.
+Em seguida toque no botão grande **Ativar JARVIS**. Pronto: ele vai ficar
+ouvindo `"JARVIS"` em segundo plano, mesmo com a tela apagada.
+
+Para parar a qualquer momento, abra o app e toque em **Parar JARVIS**.
 
 ### Permissões a conceder
 

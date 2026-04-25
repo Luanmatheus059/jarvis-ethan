@@ -55,6 +55,10 @@ class LocalConversationEngine(
         scope.launch {
             _state.value = State.THINKING
             try {
+                if (!llm.isModelInstalled()) {
+                    speak("Senhor, ainda não instalei o cérebro local. Abra o app e baixe o modelo na tela inicial, por favor.")
+                    return@launch
+                }
                 val researchHint = if (mentionsResearch(userText)) {
                     val snips = learner.research(userText)
                     learner.summarizeForPrompt(snips)

@@ -51,7 +51,7 @@ class JarvisForegroundService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     private lateinit var settings: JarvisSettings
-    private lateinit var tts: LocalTextToSpeech
+    internal lateinit var tts: LocalTextToSpeech
     private lateinit var engine: LocalConversationEngine
     private var stt: SpeechToText? = null
     private var wake: WakeWordDetector? = null
@@ -191,6 +191,13 @@ class JarvisForegroundService : Service() {
 
         private val _state = MutableStateFlow(State.IDLE)
         val state: StateFlow<State> = _state
+
+        /** True enquanto o servico em primeiro plano esta vivo (escutando). */
+        fun isRunning(): Boolean = instance != null
+
+        fun reloadVoiceProfile() {
+            instance?.tts?.reloadProfile()
+        }
 
         fun start(context: Context) {
             val intent = Intent(context, JarvisForegroundService::class.java)
