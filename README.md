@@ -2,7 +2,12 @@
 
 **Just A Rather Very Intelligent System.**
 
-A voice-first AI assistant that runs on your Mac. Talk to it, and it talks back -- with a British accent, dry wit, and an audio-reactive particle orb straight out of the MCU.
+A voice-first AI assistant that runs on your Mac — *and* on your Android phone.
+Talk to it, and it talks back. British accent (or pt-BR if you prefer), dry wit,
+audio-reactive orb straight out of the MCU.
+
+> 📱 **Android app** (100% offline, mãos livres, controla o aparelho inteiro):
+> see [`android/README.md`](android/README.md).
 
 JARVIS connects to your Apple Calendar, Mail, and Notes. It can browse the web, spawn Claude Code sessions to build entire projects, and plan your day -- all through natural voice conversation.
 
