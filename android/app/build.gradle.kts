@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -37,6 +36,11 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    // Kotlin 1.9.24 -> Compose Compiler 1.5.14 -> Compose 1.7.x (BOM 2024.09.01)
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
 
     packaging {
@@ -84,9 +88,9 @@ dependencies {
     // Reconhecimento de fala (oferecido pelo sistema Android — sem custo de API)
     // android.speech.SpeechRecognizer é parte do framework
 
-    // LLM 100% on-device — MediaPipe LLM Inference (Gemma, Phi, etc.)
+    // LLM 100% on-device — MediaPipe LLM Inference (Gemma, Phi, Falcon).
     // Modelo .task baixado uma vez e executado offline pelo NPU/GPU/CPU.
-    implementation("com.google.mediapipe:tasks-genai:0.10.14")
+    implementation("com.google.mediapipe:tasks-genai:0.10.20")
 
     // RSS / HTML parsing pra aprendizado em tempo real (noticias, arxiv, github trending)
     implementation("org.jsoup:jsoup:1.17.2")

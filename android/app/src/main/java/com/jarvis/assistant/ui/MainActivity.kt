@@ -126,18 +126,15 @@ private fun JarvisRoot(
         }
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF000816))
             .verticalScroll(rememberScrollState())
             .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
             JarvisOrb(state)
 
             Text(
@@ -228,11 +225,10 @@ private fun JarvisRoot(
                 ok = false,
             )
 
-            OutlinedButton(
-                onClick = onOpenSettings,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Mais configurações") }
-        }
+        OutlinedButton(
+            onClick = onOpenSettings,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Mais configurações") }
     }
 }
 

@@ -3,21 +3,23 @@ package com.jarvis.assistant.personality
 import android.content.Context
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * LLM 100% on-device (MediaPipe LLM Inference + Gemma).
+ * LLM 100% on-device (MediaPipe LLM Inference).
  *
- * O modelo `.task` precisa estar em /sdcard/Android/data/com.jarvis.assistant/files/llm/gemma.task
- * (ou outro caminho que o senhor configurar). Recomendado: Gemma 2 2B IT
- * quantizado em INT4, ~1.4 GB.
+ * O modelo `.task` precisa estar em
+ *   /sdcard/Android/data/com.jarvis.assistant/files/llm/gemma.task
+ * (a tela de "Cérebro local" no app baixa automaticamente). Recomendado:
+ * Falcon-RW-1B INT8 (~570 MB) ou Gemma 2 2B INT4 (~1.4 GB).
  *
  * O JARVIS NAO depende de Anthropic, Claude ou qualquer API externa para
- * conversar — tudo acontece no proprio aparelho.
+ * conversar — tudo acontece no proprio aparelho. Esta classe usa apenas
+ * a API estavel `generateResponse(prompt)` para maxima compatibilidade
+ * entre versoes do MediaPipe.
  */
 class LocalLlm(private val context: Context) {
 
@@ -26,10 +28,6 @@ class LocalLlm(private val context: Context) {
 
     fun isModelInstalled(): Boolean = modelFile().exists() && modelFile().length() > 1_000_000
 
-    /**
-     * Caminho do modelo `.task`. Mesmo nome que o ModelDownloader usa, para
-     * que o auto-downloader e o LLM falem do mesmo arquivo.
-     */
     fun modelFile(): File =
         File(context.getExternalFilesDir(null), "llm/gemma.task")
 
@@ -44,7 +42,6 @@ class LocalLlm(private val context: Context) {
             val opts = LlmInference.LlmInferenceOptions.builder()
                 .setModelPath(file.absolutePath)
                 .setMaxTokens(1024)
-                .setMaxTopK(40)
                 .build()
             inference = LlmInference.createFromOptions(context, opts)
             Log.i(TAG, "LLM local pronto: ${file.absolutePath}")
@@ -57,21 +54,16 @@ class LocalLlm(private val context: Context) {
 
     suspend fun reply(systemPrompt: String, history: List<Turn>, userText: String): String =
         withContext(ioDispatcher) {
-            val engine = inference ?: run { if (!init()) return@withContext fallback(userText); inference!! }
+            val engine = inference ?: run {
+                if (!init()) return@withContext fallback()
+                inference!!
+            }
             try {
-                val sessionOpts = LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                    .setTemperature(0.6f)
-                    .setTopK(40)
-                    .build()
-                val session = LlmInferenceSession.createFromOptions(engine, sessionOpts)
-                session.use {
-                    val prompt = buildPrompt(systemPrompt, history, userText)
-                    it.addQueryChunk(prompt)
-                    it.generateResponse().trim()
-                }
+                val prompt = buildPrompt(systemPrompt, history, userText)
+                engine.generateResponse(prompt).trim()
             } catch (t: Throwable) {
                 Log.w(TAG, "Geracao falhou: ${t.message}")
-                fallback(userText)
+                fallback()
             }
         }
 
@@ -88,11 +80,9 @@ class LocalLlm(private val context: Context) {
         return sb.toString()
     }
 
-    private fun fallback(userText: String): String {
-        // Resposta de cortesia caso o modelo ainda nao esteja instalado.
-        return "Modelo offline ainda nao foi carregado, senhor. " +
-                "Coloque o arquivo Gemma .task na pasta do app e me chame de novo."
-    }
+    private fun fallback(): String =
+        "Modelo offline ainda nao foi carregado, senhor. " +
+                "Abra o app e toque em \"Baixar agora\" na tela inicial."
 
     fun close() {
         try { inference?.close() } catch (_: Throwable) {}
