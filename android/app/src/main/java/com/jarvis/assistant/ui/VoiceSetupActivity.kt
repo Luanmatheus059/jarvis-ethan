@@ -2,15 +2,19 @@ package com.jarvis.assistant.ui
 
 import android.net.Uri
 import android.os.Bundle
+import android.speech.tts.Voice
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -18,31 +22,40 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.jarvis.assistant.audio.LocalTextToSpeech
 import com.jarvis.assistant.audio.VoiceProfile
 import com.jarvis.assistant.service.JarvisForegroundService
 
 class VoiceSetupActivity : ComponentActivity() {
+
+    private lateinit var voice: VoiceProfile
+    private lateinit var tts: LocalTextToSpeech
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val voice = VoiceProfile(applicationContext)
-        val tts = LocalTextToSpeech(applicationContext).also { it.init() }
+        voice = VoiceProfile(applicationContext)
+        tts = LocalTextToSpeech(applicationContext).also { it.init() }
 
         val pickAudio = registerForActivityResult(
-            ActivityResultContracts.OpenDocument()
+            ActivityResultContracts.GetContent()
         ) { uri: Uri? ->
             if (uri != null) {
-                runCatching { contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
                 val profile = voice.importSample(uri)
                 tts.reloadProfile()
                 JarvisForegroundService.reloadVoiceProfile()
-                tts.speak("Voz calibrada, senhor. Pitch ${"%.2f".format(profile.pitch)}, velocidade ${"%.2f".format(profile.speechRate)}.")
+                tts.speak(
+                    "Voz calibrada com a sua amostra, senhor. " +
+                            "Pitch ${"%.2f".format(profile.pitch)}, " +
+                            "velocidade ${"%.2f".format(profile.speechRate)}."
+                )
             }
         }
 
@@ -52,11 +65,16 @@ class VoiceSetupActivity : ComponentActivity() {
                     VoiceScreen(
                         voice = voice,
                         tts = tts,
-                        onPickAudio = { pickAudio.launch(arrayOf("audio/*")) },
+                        onPickAudio = { pickAudio.launch("audio/*") },
                     )
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        tts.shutdown()
     }
 }
 
@@ -68,29 +86,72 @@ private fun VoiceScreen(
 ) {
     var profile by remember { mutableStateOf(voice.current()) }
     var hasSample by remember { mutableStateOf(voice.hasCustomVoice()) }
+    var voices by remember { mutableStateOf(emptyList<Voice>()) }
+    var selectedVoice by remember { mutableStateOf<String?>(profile.voiceName.takeIf { it.isNotBlank() }) }
+
+    // Refresca a lista de vozes assim que o motor TTS sobe.
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(800)
+        voices = tts.listPtBrVoices()
+    }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(20.dp),
+        modifier = Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text("Voz personalizada", style = MaterialTheme.typography.headlineSmall)
+        Text("Voz do JARVIS", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Envie um áudio (mp3, wav ou m4a) com a voz que o senhor quer ouvir. " +
-                    "O JARVIS vai usar essa amostra para calibrar pitch e velocidade do " +
-                    "TTS local — não é clonagem neural completa, mas dá um timbre " +
-                    "muito mais próximo. Tudo offline e gratuito.",
-            style = MaterialTheme.typography.bodyMedium,
+            "Clonagem neural completa offline ainda exige modelos de vários GB " +
+                    "que não rodam bem em celular comum. O JARVIS faz o melhor possível " +
+                    "100% gratuito: escolhe a voz pt-BR mais grave (masculina) instalada " +
+                    "no seu aparelho e ajusta pitch + velocidade pra imitar a sua amostra.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFFA0BBD9),
         )
 
+        Text("1. Voz pt-BR instalada no aparelho", style = MaterialTheme.typography.titleMedium)
+        if (voices.isEmpty()) {
+            Text(
+                "Nenhuma voz pt-BR detectada ainda — abrir Configurações → Acessibilidade → " +
+                        "Saída de texto pra fala e instalar dados em Português.",
+                color = Color(0xFFE0BB7A),
+            )
+        } else {
+            voices.forEach { v ->
+                val isMale = looksMale(v.name)
+                val isSelected = selectedVoice == v.name
+                OutlinedButton(
+                    onClick = {
+                        selectedVoice = v.name
+                        profile = profile.copy(voiceName = v.name)
+                        voice.save(profile)
+                        tts.reloadProfile()
+                        JarvisForegroundService.reloadVoiceProfile()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = (if (isSelected) "✓ " else "  ") + v.name +
+                                if (isMale) "  (masculina)" else "",
+                        color = if (isSelected) Color(0xFF8FE0AA)
+                                else if (isMale) Color(0xFFCDEBFF) else Color(0xFFA0BBD9),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Text("2. Amostra de áudio (opcional, calibra pitch automaticamente)", style = MaterialTheme.typography.titleMedium)
         Button(
             onClick = onPickAudio,
             modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text(if (hasSample) "Trocar amostra" else "Escolher arquivo de áudio") }
-
+        ) { Text(if (hasSample) "Trocar amostra" else "Escolher arquivo de áudio (mp3/wav/m4a)") }
         if (hasSample) {
-            Text("Amostra atual: ${profile.sampleDurationMs} ms.")
+            Text("Amostra atual: ${profile.sampleDurationMs} ms.", color = Color(0xFFA0BBD9))
         }
 
+        Spacer(Modifier.height(8.dp))
+        Text("3. Ajuste fino", style = MaterialTheme.typography.titleMedium)
         Text("Pitch (grave ↔ agudo): ${"%.2f".format(profile.pitch)}")
         Slider(
             value = profile.pitch,
@@ -102,7 +163,6 @@ private fun VoiceScreen(
             },
             valueRange = 0.5f..1.5f,
         )
-
         Text("Velocidade da fala: ${"%.2f".format(profile.speechRate)}")
         Slider(
             value = profile.speechRate,
@@ -115,7 +175,7 @@ private fun VoiceScreen(
             valueRange = 0.5f..1.6f,
         )
 
-        OutlinedButton(
+        Button(
             onClick = { tts.speak("Bom dia, senhor. Espero ter sido bem calibrado.") },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Testar voz") }
@@ -133,4 +193,16 @@ private fun VoiceScreen(
             ) { Text("Apagar amostra") }
         }
     }
+}
+
+/** Heurística: nomes de voz tipicamente masculinos vs femininos no Android. */
+private fun looksMale(name: String): Boolean {
+    val low = name.lowercase()
+    val maleHints = listOf("male", "masc", "homem", "m-", "-m-", "bruno", "miguel", "ricardo", "joao", "antonio", "carlos")
+    val femaleHints = listOf("female", "fem", "mulher", "f-", "-f-", "maria", "ana", "luciana", "patricia")
+    if (femaleHints.any { it in low }) return false
+    if (maleHints.any { it in low }) return true
+    // Sem dica explicita — assumir feminina por seguranca (vozes Google
+    // padrão pt-BR como "pt-br-x-afs-local" sao femininas).
+    return false
 }

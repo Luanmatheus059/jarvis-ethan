@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import android.util.Log
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,15 +12,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Text-to-Speech local — usa o motor TTS do proprio Android.
+ * Text-to-Speech local em pt-BR.
  *
- * Em pt-BR a maioria dos aparelhos ja vem com a voz do Google instalada.
- * Para uma voz mais grave / "JARVIS-like", o senhor pode:
- *   1. Configuracoes → Acessibilidade → Saida de texto pra fala
- *   2. Instalar uma voz pt-BR mais natural (ex.: Vocalizer, RHVoice)
- *   3. Ajustar pitch e taxa abaixo (defaults: pitch 0.85, rate 1.0).
+ * Estratégia para soar como JARVIS (homem, voz grave):
+ *  1. Listar todas as vozes pt-BR instaladas no aparelho (TextToSpeech.getVoices()).
+ *  2. Se houver uma voz que pareça masculina pelo nome, escolher essa.
+ *  3. Caso contrário, escolher a primeira pt-BR e aplicar pitch baixo (0.78).
+ *  4. O perfil do usuário pode sobrescrever a voz manualmente na tela "Voz".
  *
- * Nao depende de internet nem de chave de API.
+ * Tudo offline e gratuito. Para qualidade superior, o usuário pode
+ * instalar Google TTS (atualizado), Vocalizer ou RHVoice via Play Store.
  */
 class LocalTextToSpeech(private val context: Context) {
 
@@ -33,10 +35,7 @@ class LocalTextToSpeech(private val context: Context) {
     fun init(onReady: (Boolean) -> Unit = {}) {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                val p = profile.current()
-                tts?.language = Locale("pt", "BR")
-                tts?.setPitch(p.pitch)         // grave por padrao, ajustado pelo perfil
-                tts?.setSpeechRate(p.speechRate)
+                applyProfile()
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) { _isSpeaking.value = true }
                     override fun onDone(utteranceId: String?) { _isSpeaking.value = false }
@@ -52,8 +51,49 @@ class LocalTextToSpeech(private val context: Context) {
         }
     }
 
+    /** Aplica o perfil atual: voz preferida, pitch e velocidade. */
+    private fun applyProfile() {
+        val engine = tts ?: return
+        val p = profile.current()
+
+        // Idioma
+        engine.language = Locale("pt", "BR")
+
+        // Escolha da voz
+        val all = engine.voices.orEmpty().filter {
+            it.locale.language.equals("pt", ignoreCase = true)
+        }
+        val target = when {
+            p.voiceName.isNotBlank() -> all.firstOrNull { it.name == p.voiceName }
+            else -> all.firstOrNull { looksMale(it.name) } ?: all.firstOrNull()
+        }
+        if (target != null) {
+            try { engine.voice = target } catch (_: Throwable) {}
+            Log.i(TAG, "Voz TTS selecionada: ${target.name}")
+        }
+
+        engine.setPitch(p.pitch)
+        engine.setSpeechRate(p.speechRate)
+    }
+
+    /** Recarrega o perfil de voz (depois de upload de amostra ou troca manual). */
+    fun reloadProfile() {
+        applyProfile()
+    }
+
+    /** Lista de vozes pt-BR disponíveis. Útil para o seletor da UI. */
+    fun listPtBrVoices(): List<Voice> {
+        val engine = tts ?: return emptyList()
+        return engine.voices.orEmpty().filter {
+            it.locale.language.equals("pt", ignoreCase = true)
+        }
+    }
+
     fun speak(text: String, utteranceId: String = "jarvis") {
-        if (!ready) init { if (it) speak(text, utteranceId) }
+        if (!ready) {
+            init { if (it) speak(text, utteranceId) }
+            return
+        }
         val params = Bundle().apply {
             putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
         }
@@ -65,18 +105,22 @@ class LocalTextToSpeech(private val context: Context) {
         _isSpeaking.value = false
     }
 
-    /** Recarrega o perfil de voz (ex.: depois do senhor enviar uma nova amostra). */
-    fun reloadProfile() {
-        val p = profile.current()
-        tts?.setPitch(p.pitch)
-        tts?.setSpeechRate(p.speechRate)
-    }
-
     fun shutdown() {
         try { tts?.shutdown() } catch (_: Throwable) {}
         tts = null
         ready = false
     }
 
-    companion object { private const val TAG = "JarvisTts" }
+    companion object {
+        private const val TAG = "JarvisTts"
+
+        /** Heurística: nome de voz tipicamente masculino. */
+        fun looksMale(name: String): Boolean {
+            val low = name.lowercase()
+            val femaleHints = listOf("female", "fem", "mulher", "afs", "maria", "ana", "luciana", "patricia")
+            if (femaleHints.any { it in low }) return false
+            val maleHints = listOf("male", "masc", "homem", "ams", "bruno", "miguel", "ricardo", "joao", "antonio", "carlos")
+            return maleHints.any { it in low }
+        }
+    }
 }

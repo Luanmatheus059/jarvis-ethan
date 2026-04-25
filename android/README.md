@@ -69,17 +69,30 @@ automaticamente. O senhor só precisa baixar.
 > Se preferir compilar você mesmo: `cd android && ./gradlew :app:assembleDebug`
 > (precisa de JDK 17 + Android SDK + plataforma 34).
 
-## Setup dentro do app (tudo no celular, sem PC)
+## Setup dentro do app
 
 Ao abrir o app pela primeira vez, a tela inicial mostra cards com checklist:
 
-1. **Cérebro local (LLM)** → toque em "Baixar agora". Padrão: Falcon-RW-1B INT8
-   (~570 MB, gratuito, sem login). Pode trocar por outro `.task` colando uma URL.
-2. **Voz personalizada** → toque em "Enviar áudio" e escolha o MP3/WAV com a
-   voz desejada. O app calibra pitch e velocidade do TTS local pra imitar
-   o tom (clonagem neural completa offline ainda não cabe num celular comum
-   sem dor — esta é a melhor opção 100% gratuita).
-3. **Controle do telefone (Acessibilidade)** → toque para abrir a tela do
+1. **Cérebro local (LLM)** → tela "Cérebro local". Duas opções:
+   - **Selecionar arquivo .task**: baixe o `.task` no PC ou direto no celular
+     (Gemma 3 1B INT4 do HuggingFace, por exemplo) e selecione no picker.
+   - **URL direta**: cole o link do arquivo `.task` se a URL for pública.
+   > **Sem o LLM, o JARVIS ainda funciona** com o cérebro de regras embutido —
+   > responde a hora, abre apps, faz ligações pelo nome do contato, manda SMS,
+   > controla volume/brilho/alarme, busca notícias. O LLM é só para perguntas
+   > livres ("me explica como funciona X").
+
+2. **Voz do JARVIS** → tela "Voz personalizada":
+   - Lista todas as vozes pt-BR instaladas no aparelho. Toque numa marcada
+     como "(masculina)" — fica próximo do tom do JARVIS.
+   - Opcional: envie um áudio de amostra (mp3/wav/m4a) e o app calibra pitch
+     e velocidade automaticamente.
+   - Sliders manuais para ajuste fino, botão "Testar voz".
+   > Para uma voz mais natural ainda: instale **Google TTS** atualizado, ou
+   > **Vocalizer** / **RHVoice** pela Play Store. Aparecem automaticamente
+   > na lista.
+
+3. **Controle do telefone (Acessibilidade)** → toque pra abrir a tela do
    sistema e ative `JARVIS — Controle do Telefone`.
 4. **Definir como Assistente** (opcional) — permite chamar pelo gesto do botão
    power.

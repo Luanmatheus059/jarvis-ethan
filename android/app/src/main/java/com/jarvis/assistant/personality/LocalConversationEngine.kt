@@ -16,17 +16,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Motor de conversa 100% local:
+ * Motor de conversa 100% local. Pipeline:
  *
- *   STT (Android) -> LocalConversationEngine.handle(text)
- *      -> RealtimeLearner (se a frase pedir pesquisa)
- *      -> LocalLlm (Gemma on-device) gera resposta com personalidade JARVIS
- *      -> Extrai tags [PHONE:...] e dispara via PhoneActionRouter
- *      -> Lê o restante em voz alta com LocalTextToSpeech (pt-BR)
+ *   STT -> handle(text)
+ *      -> FallbackBrain (regras + RealtimeLearner)
+ *         se cobriu o pedido, fala e dispara ações
+ *         se não cobriu, e o LLM estiver instalado, gera resposta livre
+ *      -> Executa tags [PHONE:...] / [LEARN]
+ *      -> Lê em voz alta com LocalTextToSpeech (pt-BR)
  *
- * Sem Anthropic, sem Fish Audio, sem servidor externo. Tudo dentro do
- * aparelho. Apenas as buscas em tempo real (GitHub/arXiv/Noticias)
- * usam a internet — e isso e proposital, conforme pedido do senhor.
+ * Sem Anthropic, sem Fish Audio, sem servidor externo. As únicas chamadas
+ * de rede são as buscas em tempo real (GitHub/arXiv/Notícias) — e só
+ * quando o senhor pedir.
  */
 class LocalConversationEngine(
     private val context: Context,
@@ -34,6 +35,7 @@ class LocalConversationEngine(
 ) {
     private val llm = LocalLlm(context)
     private val learner = RealtimeLearner(context)
+    private val fallback = FallbackBrain(context)
     private val history = ArrayDeque<LocalLlm.Turn>(16)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -55,10 +57,28 @@ class LocalConversationEngine(
         scope.launch {
             _state.value = State.THINKING
             try {
-                if (!llm.isModelInstalled()) {
-                    speak("Senhor, ainda não instalei o cérebro local. Abra o app e baixe o modelo na tela inicial, por favor.")
+                // 1. Tentar resolver com regras (rápido, offline, sem LLM)
+                val ruled = fallback.handle(userText)
+                if (ruled != null) {
+                    if (ruled.actions.isNotBlank()) {
+                        PhoneActionRouter.executeAll(context, ruled.actions)
+                    }
+                    history.addLast(LocalLlm.Turn(LocalLlm.Role.USER, userText))
+                    history.addLast(LocalLlm.Turn(LocalLlm.Role.ASSISTANT, ruled.spoken))
+                    while (history.size > 12) history.removeFirst()
+                    speak(ruled.spoken)
                     return@launch
                 }
+
+                // 2. Cair pro LLM se instalado
+                if (!llm.isModelInstalled()) {
+                    speak(
+                        "Não consegui interpretar isso pelas minhas regras, senhor. " +
+                                "Para perguntas livres, instale o cérebro local na tela inicial."
+                    )
+                    return@launch
+                }
+
                 val researchHint = if (mentionsResearch(userText)) {
                     val snips = learner.research(userText)
                     learner.summarizeForPrompt(snips)
@@ -66,9 +86,7 @@ class LocalConversationEngine(
 
                 val system = buildString {
                     append(JarvisPersona.SYSTEM_PROMPT_PT_BR)
-                    if (researchHint.isNotBlank()) {
-                        append("\n\n").append(researchHint)
-                    }
+                    if (researchHint.isNotBlank()) append("\n\n").append(researchHint)
                 }
 
                 history.addLast(LocalLlm.Turn(LocalLlm.Role.USER, userText))
@@ -80,16 +98,11 @@ class LocalConversationEngine(
                 val reply = raw.ifBlank { "Receio nao ter resposta agora, senhor." }
                 history.addLast(LocalLlm.Turn(LocalLlm.Role.ASSISTANT, reply))
 
-                // Executa qualquer acao no telefone solicitada pelo modelo.
                 PhoneActionRouter.executeAll(context, reply)
-
-                // Trata pedido de pesquisa explicito ("[LEARN] ..."): faz e
-                // re-fala a frase principal.
                 handleLearnTags(reply)?.let { followUp ->
                     history.addLast(LocalLlm.Turn(LocalLlm.Role.ASSISTANT, followUp))
                     speak(followUp)
                 }
-
                 speak(stripTags(reply))
             } catch (t: Throwable) {
                 Log.w(TAG, "Conversation failed: ${t.message}")

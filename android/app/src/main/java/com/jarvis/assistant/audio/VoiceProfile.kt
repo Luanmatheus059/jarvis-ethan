@@ -28,10 +28,11 @@ import org.json.JSONObject
 class VoiceProfile(private val context: Context) {
 
     data class Profile(
-        val pitch: Float = 0.85f,
+        val pitch: Float = 0.78f,
         val speechRate: Float = 1.0f,
         val sampleDurationMs: Long = 0L,
         val sampleHash: String = "",
+        val voiceName: String = "",
     )
 
     private val profileFile: File
@@ -46,10 +47,11 @@ class VoiceProfile(private val context: Context) {
             else {
                 val obj = JSONObject(profileFile.readText())
                 Profile(
-                    pitch = obj.optDouble("pitch", 0.85).toFloat(),
+                    pitch = obj.optDouble("pitch", 0.78).toFloat(),
                     speechRate = obj.optDouble("speechRate", 1.0).toFloat(),
                     sampleDurationMs = obj.optLong("sampleDurationMs", 0L),
                     sampleHash = obj.optString("sampleHash", ""),
+                    voiceName = obj.optString("voiceName", ""),
                 )
             }
         } catch (t: Throwable) {
@@ -66,6 +68,7 @@ class VoiceProfile(private val context: Context) {
             .put("speechRate", profile.speechRate.toDouble())
             .put("sampleDurationMs", profile.sampleDurationMs)
             .put("sampleHash", profile.sampleHash)
+            .put("voiceName", profile.voiceName)
         profileFile.writeText(obj.toString(2))
     }
 
