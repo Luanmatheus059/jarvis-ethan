@@ -87,6 +87,26 @@ class ModelDownloader(private val context: Context) {
                     }
                 }
             }
+            // Validação básica — arquivos `.task` válidos têm dezenas/centenas
+            // de MB e começam com bytes binários (geralmente "TFL" ou similar).
+            if (tmp.length() < 50_000_000L) {
+                val size = human(tmp.length())
+                tmp.delete()
+                _progress.value = Progress.Failed(
+                    "Arquivo selecionado tem apenas $size — pequeno demais " +
+                            "para um modelo LLM. Tem certeza de que é um `.task`?"
+                )
+                return@withContext false
+            }
+            val firstByte = tmp.inputStream().use { it.read() }
+            if (firstByte == '<'.code) {
+                tmp.delete()
+                _progress.value = Progress.Failed(
+                    "O arquivo começa com HTML — provavelmente é uma página salva, não um modelo."
+                )
+                return@withContext false
+            }
+
             if (target.exists()) target.delete()
             if (!tmp.renameTo(target)) {
                 _progress.value = Progress.Failed("Não consegui mover o arquivo final.")
@@ -101,7 +121,11 @@ class ModelDownloader(private val context: Context) {
         }
     }
 
-    /** Baixa de uma URL HTTP/HTTPS aberta. */
+    /**
+     * Baixa de uma URL HTTP/HTTPS aberta. Valida que o resultado realmente
+     * parece um modelo `.task` — recusa páginas HTML (HuggingFace 401, blob
+     * preview), arquivos pequenos demais e respostas com Content-Type texto.
+     */
     suspend fun download(url: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val target = targetFile()
@@ -111,7 +135,18 @@ class ModelDownloader(private val context: Context) {
             val req = Request.Builder().url(url).build()
             http.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) {
-                    _progress.value = Progress.Failed("HTTP ${resp.code} — verifique a URL.")
+                    _progress.value = Progress.Failed(
+                        "HTTP ${resp.code} — URL provavelmente errada ou pede login. " +
+                                "Use a Opção 1 (selecionar arquivo)."
+                    )
+                    return@withContext false
+                }
+                val ct = resp.header("Content-Type").orEmpty().lowercase()
+                if (ct.startsWith("text/") || ct.contains("html") || ct.contains("json")) {
+                    _progress.value = Progress.Failed(
+                        "URL retornou \"$ct\" em vez de um arquivo binário. " +
+                                "Use o link \"resolve/main\" do HuggingFace, não o \"blob/main\"."
+                    )
                     return@withContext false
                 }
                 val total = resp.body?.contentLength() ?: -1L
@@ -119,6 +154,8 @@ class ModelDownloader(private val context: Context) {
                     _progress.value = Progress.Failed("Resposta vazia.")
                     return@withContext false
                 }
+
+                var firstBytes = ByteArray(0)
                 FileOutputStream(tmp).use { out ->
                     val buf = ByteArray(64 * 1024)
                     var received = 0L
@@ -126,16 +163,42 @@ class ModelDownloader(private val context: Context) {
                     while (true) {
                         val read = source.read(buf)
                         if (read <= 0) break
+                        // Captura os primeiros bytes pra detectar HTML
+                        if (firstBytes.isEmpty() && read > 0) {
+                            val len = minOf(read, 32)
+                            firstBytes = buf.copyOfRange(0, len)
+                            // Se começa com "<" provavelmente é HTML/XML.
+                            if (firstBytes.isNotEmpty() && firstBytes[0] == '<'.code.toByte()) {
+                                tmp.delete()
+                                _progress.value = Progress.Failed(
+                                    "Resposta começa com HTML/XML — não é um modelo binário. " +
+                                            "Verifique a URL."
+                                )
+                                return@withContext false
+                            }
+                        }
                         out.write(buf, 0, read)
                         received += read
                         val now = System.currentTimeMillis()
-                        if (now - lastUpdate > 500) {
+                        if (now - lastUpdate > 400) {
                             _progress.value = Progress.Downloading(received, total)
                             lastUpdate = now
                         }
                     }
                 }
             }
+
+            // Validação de tamanho — modelos LLM .task vão de ~500MB pra cima.
+            // Aceitar 50MB+ como limiar seguro contra páginas de erro.
+            if (tmp.length() < 50_000_000L) {
+                tmp.delete()
+                _progress.value = Progress.Failed(
+                    "Arquivo baixado tem apenas ${human(tmp.length())} — " +
+                            "muito pequeno para um modelo LLM. URL provavelmente está errada."
+                )
+                return@withContext false
+            }
+
             if (target.exists()) target.delete()
             if (!tmp.renameTo(target)) {
                 _progress.value = Progress.Failed("Não consegui mover o arquivo final.")
@@ -148,6 +211,15 @@ class ModelDownloader(private val context: Context) {
             _progress.value = Progress.Failed(t.message ?: "erro desconhecido")
             false
         }
+    }
+
+    private fun human(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val units = listOf("KB", "MB", "GB")
+        var v = bytes.toDouble() / 1024
+        var i = 0
+        while (v >= 1024 && i < units.lastIndex) { v /= 1024; i++ }
+        return "%.1f %s".format(v, units[i])
     }
 
     fun delete(): Boolean {

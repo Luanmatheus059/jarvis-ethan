@@ -3,6 +3,7 @@ package com.jarvis.assistant.ui
 import android.net.Uri
 import android.os.Bundle
 import android.speech.tts.Voice
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,6 +24,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,31 +35,34 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.assistant.audio.LocalTextToSpeech
 import com.jarvis.assistant.audio.VoiceProfile
 import com.jarvis.assistant.service.JarvisForegroundService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class VoiceSetupActivity : ComponentActivity() {
 
     private lateinit var voice: VoiceProfile
     private lateinit var tts: LocalTextToSpeech
 
+    /** Estado visível na UI — feedback do upload do áudio. */
+    private val statusFlow = kotlinx.coroutines.flow.MutableStateFlow("")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         voice = VoiceProfile(applicationContext)
         tts = LocalTextToSpeech(applicationContext).also { it.init() }
 
-        val pickAudio = registerForActivityResult(
+        // Picker que aceita QUALQUER tipo de arquivo — alguns sistemas
+        // (MIUI/OriginOS) escondem áudios quando o filtro é "audio/*".
+        // Validamos depois pela extensão e tentando ler com MediaExtractor.
+        val pickAny = registerForActivityResult(
             ActivityResultContracts.GetContent()
-        ) { uri: Uri? ->
-            if (uri != null) {
-                val profile = voice.importSample(uri)
-                tts.reloadProfile()
-                JarvisForegroundService.reloadVoiceProfile()
-                tts.speak(
-                    "Voz calibrada com a sua amostra, senhor. " +
-                            "Pitch ${"%.2f".format(profile.pitch)}, " +
-                            "velocidade ${"%.2f".format(profile.speechRate)}."
-                )
-            }
-        }
+        ) { uri: Uri? -> handlePickedUri(uri) }
+
+        val pickAudioOnly = registerForActivityResult(
+            ActivityResultContracts.GetContent()
+        ) { uri: Uri? -> handlePickedUri(uri) }
 
         setContent {
             MaterialTheme {
@@ -65,10 +70,44 @@ class VoiceSetupActivity : ComponentActivity() {
                     VoiceScreen(
                         voice = voice,
                         tts = tts,
-                        onPickAudio = { pickAudio.launch("audio/*") },
+                        onPickAudio = { pickAudioOnly.launch("audio/*") },
+                        onPickAny = { pickAny.launch("*/*") },
+                        statusFlow = statusFlow,
                     )
                 }
             }
+        }
+    }
+
+    private fun handlePickedUri(uri: Uri?) {
+        if (uri == null) {
+            statusFlow.value = "Nenhum arquivo selecionado."
+            return
+        }
+        statusFlow.value = "Importando arquivo..."
+        MainScope().launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { voice.importSample(uri) }
+            }
+            if (result.isFailure) {
+                val msg = result.exceptionOrNull()?.message ?: "erro desconhecido"
+                statusFlow.value = "✗ Falha ao importar: $msg"
+                Toast.makeText(
+                    this@VoiceSetupActivity,
+                    "Não consegui importar o áudio: $msg",
+                    Toast.LENGTH_LONG,
+                ).show()
+                return@launch
+            }
+            val profile = result.getOrThrow()
+            tts.reloadProfile()
+            JarvisForegroundService.reloadVoiceProfile()
+            statusFlow.value = "✓ Importado (${profile.sampleDurationMs} ms). Pitch %.2f, velocidade %.2f.".format(profile.pitch, profile.speechRate)
+            tts.speak(
+                "Voz calibrada com a sua amostra, senhor. " +
+                        "Pitch ${"%.2f".format(profile.pitch)}, " +
+                        "velocidade ${"%.2f".format(profile.speechRate)}."
+            )
         }
     }
 
@@ -83,16 +122,26 @@ private fun VoiceScreen(
     voice: VoiceProfile,
     tts: LocalTextToSpeech,
     onPickAudio: () -> Unit,
+    onPickAny: () -> Unit,
+    statusFlow: kotlinx.coroutines.flow.StateFlow<String>,
 ) {
     var profile by remember { mutableStateOf(voice.current()) }
     var hasSample by remember { mutableStateOf(voice.hasCustomVoice()) }
     var voices by remember { mutableStateOf(emptyList<Voice>()) }
     var selectedVoice by remember { mutableStateOf<String?>(profile.voiceName.takeIf { it.isNotBlank() }) }
+    val status by statusFlow.collectAsState()
 
-    // Refresca a lista de vozes assim que o motor TTS sobe.
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(800)
         voices = tts.listPtBrVoices()
+    }
+
+    LaunchedEffect(status) {
+        // recarrega ao receber sinal de "✓ Importado"
+        if (status.startsWith("✓")) {
+            profile = voice.current()
+            hasSample = voice.hasCustomVoice()
+        }
     }
 
     Column(
@@ -118,7 +167,7 @@ private fun VoiceScreen(
             )
         } else {
             voices.forEach { v ->
-                val isMale = looksMale(v.name)
+                val isMale = LocalTextToSpeech.looksMale(v.name)
                 val isSelected = selectedVoice == v.name
                 OutlinedButton(
                     onClick = {
@@ -142,10 +191,32 @@ private fun VoiceScreen(
 
         Spacer(Modifier.height(8.dp))
         Text("2. Amostra de áudio (opcional, calibra pitch automaticamente)", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Se o picker abaixo não mostrar seus áudios, use \"Selecionar qualquer arquivo\" " +
+                    "— alguns lançadores escondem mp3/wav quando o filtro é estrito.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFFA0BBD9),
+        )
         Button(
             onClick = onPickAudio,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text(if (hasSample) "Trocar amostra" else "Escolher arquivo de áudio (mp3/wav/m4a)") }
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+        ) { Text(if (hasSample) "Trocar amostra (apenas áudios)" else "Selecionar áudio (apenas áudios)") }
+        OutlinedButton(
+            onClick = onPickAny,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+        ) { Text("Selecionar qualquer arquivo") }
+
+        if (status.isNotBlank()) {
+            Text(
+                status,
+                color = when {
+                    status.startsWith("✓") -> Color(0xFF8FE0AA)
+                    status.startsWith("✗") -> Color(0xFFE07A7A)
+                    else -> Color(0xFFE0BB7A)
+                },
+            )
+        }
+
         if (hasSample) {
             Text("Amostra atual: ${profile.sampleDurationMs} ms.", color = Color(0xFFA0BBD9))
         }
@@ -193,16 +264,4 @@ private fun VoiceScreen(
             ) { Text("Apagar amostra") }
         }
     }
-}
-
-/** Heurística: nomes de voz tipicamente masculinos vs femininos no Android. */
-private fun looksMale(name: String): Boolean {
-    val low = name.lowercase()
-    val maleHints = listOf("male", "masc", "homem", "m-", "-m-", "bruno", "miguel", "ricardo", "joao", "antonio", "carlos")
-    val femaleHints = listOf("female", "fem", "mulher", "f-", "-f-", "maria", "ana", "luciana", "patricia")
-    if (femaleHints.any { it in low }) return false
-    if (maleHints.any { it in low }) return true
-    // Sem dica explicita — assumir feminina por seguranca (vozes Google
-    // padrão pt-BR como "pt-br-x-afs-local" sao femininas).
-    return false
 }

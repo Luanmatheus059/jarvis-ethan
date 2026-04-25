@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
                     onOpenAccessibility = {
                         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     },
+                    onOpenAppInfo = { openAppInfo() },
                     onOpenAssistantPicker = {
                         startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS))
                     },
@@ -82,6 +83,24 @@ class MainActivity : ComponentActivity() {
         ensurePermissions()
     }
 
+    /**
+     * Abre a tela "Informações do app" para JARVIS. Lá o senhor encontra o
+     * menu (três pontos) com a opção "Permitir configurações restritas",
+     * que destravam o serviço de Acessibilidade quando o app foi instalado
+     * fora da Play Store (proteção do Android 13+).
+     */
+    private fun openAppInfo() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.fromParts("package", packageName, null)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (_: Throwable) {
+            startActivity(Intent(Settings.ACTION_APPLICATION_SETTINGS))
+        }
+    }
+
     private fun ensurePermissions() {
         val needed = mutableListOf(Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -100,6 +119,7 @@ class MainActivity : ComponentActivity() {
 private fun JarvisRoot(
     onAskPermissions: () -> Unit,
     onOpenAccessibility: () -> Unit,
+    onOpenAppInfo: () -> Unit,
     onOpenAssistantPicker: () -> Unit,
     onOpenBatterySettings: () -> Unit,
     onOpenModel: () -> Unit,
@@ -208,6 +228,19 @@ private fun JarvisRoot(
                 onAction = onOpenAccessibility,
                 ok = accessibilityOn,
             )
+
+            // Cartão específico para o problema "Configuração restrita" (Android 13+).
+            if (!accessibilityOn) {
+                SetupCard(
+                    title = "Apareceu \"Configuração restrita\"?",
+                    description = "Proteção do Android 13+ contra apps de fora da Play Store. " +
+                            "Toque no botão, abra o menu (três pontos) no canto superior, " +
+                            "selecione \"Permitir configurações restritas\" e volte para Acessibilidade.",
+                    actionLabel = "Abrir info do app",
+                    onAction = onOpenAppInfo,
+                    ok = false,
+                )
+            }
 
             SetupCard(
                 title = "Definir como Assistente",
