@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">JARVIS</string>
+    <string name="settings_title">Configurações</string>
+    <string name="accessibility_service_label">JARVIS — Controle do Telefone</string>
+    <string name="accessibility_service_description">Permite que JARVIS execute ações no aparelho — abrir apps, ler a tela, tocar em botões — quando o senhor pedir.</string>
+
+    <string name="notification_channel_name">JARVIS Ativo</string>
+    <string name="notification_channel_description">Notificação persistente que mantém JARVIS ouvindo em segundo plano.</string>
+    <string name="notification_listening_title">JARVIS está atento</string>
+    <string name="notification_listening_text">Aguardando a sua palavra, senhor.</string>
+
+    <string name="permission_microphone_rationale">Sem o microfone não tenho como ouvir o senhor.</string>
+    <string name="permission_phone_rationale">Para realizar chamadas em seu nome, senhor.</string>
+
+    <string name="ui_status_idle">Aguardando, senhor.</string>
+    <string name="ui_status_listening">Ouvindo…</string>
+    <string name="ui_status_thinking">Considerando…</string>
+    <string name="ui_status_speaking">Falando…</string>
+    <string name="ui_status_disconnected">Sem ligação ao servidor.</string>
+
+    <string name="server_url_label">URL do servidor JARVIS</string>
+    <string name="enable_wake_word">Palavra de ativação ("JARVIS")</string>
+    <string name="enable_background">Manter ativo em segundo plano</string>
+    <string name="language_label">Idioma do reconhecimento</string>
+</resources>
